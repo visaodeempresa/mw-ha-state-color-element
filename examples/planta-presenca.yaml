@@ -1,0 +1,15 @@
+# Presença por ÁREA, não por sensor: ocupação vence movimento, e "todos os
+# sensores mudos" tem cor própria (vinho) para não passar por "livre".
+# Porte fiel do template presenca_sensor_style dos dashboards home-9-0-*.
+type: custom:mw-state-color-element
+preset: presence
+title: 🟧 SALA — presença
+occupancy_entities:
+  - binary_sensor.ocupacao_humana_na_sala_de_tv
+  - binary_sensor.ocupacao_humana_na_sala_de_jantar
+motion_entities:
+  - binary_sensor.movimento_na_sala
+left: 44%
+top: 20%
+width: 27%
+height: 31%

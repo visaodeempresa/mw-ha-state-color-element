@@ -1,0 +1,12 @@
+# Mapa térmico de um cômodo — o retângulo, a cor e o número.
+# Equivale ao custom:button-card + template temp_sensor_style que a casa usava,
+# em 8 linhas em vez de 41.
+type: custom:mw-state-color-element
+entity: sensor.temperatura_da_sala_de_tv
+preset: temperature
+title: 🟧📺🌡️ Temperatura da Sala de TV
+left: 44%
+top: 30.5%
+width: 27%
+height: 21%
+text_rotate: 90

@@ -1,0 +1,17 @@
+# Escala que a casa não tem pronta: `stops` são limites superiores inclusivos
+# e `colors` tem SEMPRE um elemento a mais (a cor de "acima do último limite").
+type: custom:mw-state-color-element
+entity: sensor.ruido_da_sala
+preset: custom
+stops: [35, 55, 70]
+colors:
+  - "rgba(67, 160, 71, 0.45)"    # ≤ 35 dB — silêncio
+  - "rgba(255, 166, 0, 0.45)"    # ≤ 55 dB — conversa
+  - "rgba(219, 68, 55, 0.45)"    # ≤ 70 dB — alto
+  - "rgba(123, 31, 162, 0.45)"   # > 70 dB — muito alto
+unit: dB
+decimals: 0
+left: 10%
+top: 10%
+width: 20%
+height: 10%

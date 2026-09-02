@@ -1,0 +1,12 @@
+# CO₂ do escritório, com borda para destacar que ali existe sensor
+# (áreas sem sensor ficam com a cor de "sem leitura", que não é verde).
+type: custom:mw-state-color-element
+entity: sensor.qualidade_do_ar_do_escritorio_dioxido_de_carbono
+preset: co2
+title: ⬛️🔍 CO₂ do Escritório
+left: 44%
+top: 42%
+width: 31%
+height: 16%
+border: 2
+text_rotate: 90
