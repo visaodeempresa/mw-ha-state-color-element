@@ -289,9 +289,19 @@ check("campo de título no schema do editor",
   "MW_TITLE_FIELD tem de ser usado no SCHEMA, não só definido");
 check("rótulo do título nos LABELS",
   mwSrc.split("MW_TITLE_LABEL").length - 1 >= 2);
-check("os três blocos canônicos estão embutidos",
-  ["mw-element-identity v1", "mw-climate-scale v1", "mw-air-quality-scale v1"]
+check("os quatro blocos canônicos estão embutidos",
+  ["mw-element-identity v1", "mw-climate-scale v1", "mw-air-quality-scale v1",
+   "mw-level-scale v1"]
     .every((m) => mwSrc.includes(`>>> ${m}`) && mwSrc.includes(`<<< ${m}`)));
+// A promoção de lux/bateria para IA/lib não pode ter mudado número nenhum:
+// estas são as tabelas que a página de knowledge documenta.
+check("lux continua com os 6 limites documentados",
+  mwSrc.includes("MW_LUX_STOPS = [0.9, 5, 20, 80, 250, 800]"));
+check("bateria continua na régua canônica 10/20/40/60",
+  mwSrc.includes("MW_BAT_CANON_STOPS = [10, 20, 40, 60]"));
+check("o elemento usa a canônica, não a fina do arco-íris",
+  mwSrc.includes("tableFrom(MW_BAT_CANON_RGB, MW_BAT_CANON_STOPS, alpha)")
+  && !mwSrc.includes("tableFrom(MW_BAT_FINA_RGB"));
 
 console.log(fails ? `\n${fails} verificação(ões) falharam` : "\ntudo ok");
 process.exit(fails ? 1 : 0);
