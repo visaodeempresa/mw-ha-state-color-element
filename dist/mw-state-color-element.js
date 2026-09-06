@@ -316,18 +316,115 @@
     motion: "presence", occupancy: "presence", presence: "presence",
   };
 
-  // Escala de iluminância — grandeza sem regra global (a 40 é só °C e %RH).
-  // Faixas: escuro / penumbra / luz de tarefa fraca / ambiente / claro /
-  // muito claro / sol. Documentada em IA/knowledge/escala-de-iluminancia.md.
-  const LUX_STOPS = [0.9, 5, 20, 80, 250, 800];
-  const LUX_RGB = [
-    "10, 14, 30", "40, 48, 90", "70, 90, 150", "120, 160, 210",
-    "190, 215, 235", "245, 235, 170", "255, 214, 90",
+  // >>> mw-level-scale v1 — fonte canônica: /Volumes/SSD-T1-01/CLAUDE-SSD/IA/lib/mw-level-scale/mw-level-scale.js
+  // Escalas de nível: iluminância (lx) e bateria (%).
+  // Doc: IA/knowledge/escala-de-iluminancia.md.
+  const MW_LEVEL_ALPHA = 0.5;
+
+  // --- ILUMINÂNCIA -------------------------------------------------------
+  // Limites SUPERIORES inclusivos, do mais escuro para o mais claro. Os
+  // degraus crescem em razão ~3-4x porque a percepção de luz é logarítmica:
+  // a diferença entre 0 e 20 lx muda a vida do morador, a diferença entre
+  // 800 e 1200 lx não muda nada. Os números saíram do que os sensores da
+  // casa realmente reportam (medição de 2026-09-02: 0, 4, 6, 8, 10, 20, 31,
+  // 35 lx; remedição de 2026-09-06 com 15 sensores: p50 = 10, p90 = 96,
+  // max = 180) — a vida útil da escala está toda abaixo de 200 lx, e uma
+  // escala linear até 1000 pintaria a casa inteira da mesma cor.
+  // A cor é azul-noite -> âmbar de sol, e NÃO é a rampa de temperatura de
+  // propósito: quem olha a planta térmica e a planta de luz lado a lado não
+  // pode confundir as duas.
+  const MW_LUX_STOPS = [0.9, 5, 20, 80, 250, 800];
+  const MW_LUX_RGB = [
+    "10, 14, 30",     // escuro — noite, olho adaptado
+    "40, 48, 90",     // penumbra — dá para andar
+    "70, 90, 150",    // luz fraca — TV, abajur
+    "120, 160, 210",  // luz de ambiente
+    "190, 215, 235",  // claro — leitura confortável
+    "245, 235, 170",  // muito claro — luz de tarefa
+    "255, 214, 90",   // sol entrando
   ];
 
-  // Bateria: a mesma leitura de sempre — vermelho embaixo, verde em cima.
-  const BAT_STOPS = [10, 20, 40, 60];
-  const BAT_RGB = ["219, 68, 55", "255, 140, 0", "255, 166, 0", "154, 205, 50", "67, 160, 71"];
+  // --- BATERIA -----------------------------------------------------------
+  // Limites SUPERIORES inclusivos, em %. Ruim -> bom, vermelho -> verde.
+  // `canonica`: a régua documentada na página de iluminância, usada pelo
+  // mw-ha-state-color-element. Quatro degraus.
+  const MW_BAT_CANON_STOPS = [10, 20, 40, 60];
+  const MW_BAT_CANON_RGB = [
+    "219, 68, 55",   // <=10 % — troque hoje
+    "255, 140, 0",   // <=20 % — troque esta semana
+    "255, 166, 0",   // <=40 % — de olho
+    "154, 205, 50",  // <=60 % — tranquilo
+    "67, 160, 71",   // acima — cheia
+  ];
+  // `fina`: a régua do mw-ha-rainbow-card. Cinco degraus — separa "quase
+  // morta" (<=5 %) de "morrendo" (<=20 %) e ainda enxerga o topo da carga
+  // (<=80 %), que num arco-íris de 8 dispositivos lado a lado é o que deixa
+  // ver qual pilha vai cair primeiro.
+  const MW_BAT_FINA_STOPS = [5, 20, 40, 60, 80];
+  const MW_BAT_FINA_RGB = [
+    "139, 0, 0",     // <=5 %  — quase morta
+    "229, 57, 53",   // <=20 % — morrendo
+    "255, 152, 0",   // <=40 % — de olho
+    "253, 216, 53",  // <=60 % — ainda dá
+    "156, 204, 101", // <=80 % — tranquilo
+    "67, 160, 71",   // acima  — cheia
+  ];
+
+  const MW_LEVEL_ALIAS = {
+    lux: "lux", lx: "lux", illuminance: "lux", iluminancia: "lux", luz: "lux",
+    battery: "battery", bateria: "battery", bat: "battery",
+    battery_fina: "battery_fina", bateria_fina: "battery_fina", fina: "battery_fina",
+    battery_canonica: "battery", bateria_canonica: "battery", canonica: "battery",
+  };
+
+  const mwLevelRgba = (triplet, alpha) =>
+    `rgba(${triplet}, ${alpha === undefined || alpha === null ? MW_LEVEL_ALPHA : alpha})`;
+
+  const MW_LEVEL_TABLES = {
+    lux: { stops: MW_LUX_STOPS, rgb: MW_LUX_RGB, clamp: null, unit: "lx", decimals: 0 },
+    battery: { stops: MW_BAT_CANON_STOPS, rgb: MW_BAT_CANON_RGB, clamp: [0, 100], unit: "%", decimals: 0 },
+    battery_fina: { stops: MW_BAT_FINA_STOPS, rgb: MW_BAT_FINA_RGB, clamp: [0, 100], unit: "%", decimals: 0 },
+  };
+
+  const mwLevelKind = (kind) => {
+    const k = String(kind || "").toLowerCase().trim();
+    return MW_LEVEL_ALIAS[k] || (MW_LEVEL_TABLES[k] ? k : null);
+  };
+
+  // Devolve {stops, colors, clamp} — a mesma forma que mwClimateScale, para
+  // que o consumidor tenha um caminho de pintura só. Limite SUPERIOR
+  // inclusivo: a cor é a da primeira faixa cujo limite não foi ultrapassado.
+  const mwLevelScale = (kind, alpha) => {
+    const k = mwLevelKind(kind);
+    if (!k) return null;
+    const t = MW_LEVEL_TABLES[k];
+    return {
+      stops: t.stops.slice(),
+      colors: t.rgb.map((c) => mwLevelRgba(c, alpha)),
+      clamp: t.clamp ? t.clamp.slice() : null,
+    };
+  };
+
+  // Vazio/nulo NÃO é zero. Number("") e Number(null) devolvem 0, e um sensor
+  // sem leitura acabaria pintado como 0 lx (o degrau mais escuro) ou 0 % de
+  // pilha (o mais vermelho) em vez de cair na cor de "sem leitura" do
+  // consumidor. A guarda mora aqui para nenhum consumidor ter de lembrar.
+  const mwLevelNum = (value) => {
+    if (value === null || value === undefined || value === "") return null;
+    const v = Number(value);
+    return Number.isFinite(v) ? v : null;
+  };
+
+  const mwLevelColor = (kind, value, alpha) => {
+    const s = mwLevelScale(kind, alpha);
+    if (!s) return null;
+    let v = mwLevelNum(value);
+    if (v === null) return null;
+    if (s.clamp) v = Math.min(Math.max(v, s.clamp[0]), s.clamp[1]);
+    const i = s.stops.findIndex((stop) => v <= stop);
+    return s.colors[i === -1 ? s.stops.length : i];
+  };
+  // <<< mw-level-scale v1
 
   const rgbaOf = (triplet, alpha) => `rgba(${triplet}, ${alpha})`;
 
@@ -731,8 +828,8 @@
         }
         return mwAirColor(k, raw, alpha);
       }
-      if (kind === "table:lux") return tableColor(tableFrom(LUX_RGB, LUX_STOPS, alpha), raw, c.mode);
-      if (kind === "table:bat") return tableColor(tableFrom(BAT_RGB, BAT_STOPS, alpha), raw, c.mode);
+      if (kind === "table:lux") return tableColor(tableFrom(MW_LUX_RGB, MW_LUX_STOPS, alpha), raw, c.mode);
+      if (kind === "table:bat") return tableColor(tableFrom(MW_BAT_CANON_RGB, MW_BAT_CANON_STOPS, alpha), raw, c.mode);
       if (kind === "custom") {
         return tableColor({
           stops: Array.isArray(c.stops) ? c.stops.map(Number) : [],
