@@ -204,11 +204,23 @@ const geo = make({
 check("left/top/width/height vão para o host",
   geo.style.left === "29%" && geo.style.top === "7%"
   && geo.style.width === "33%" && geo.style.height === "12%");
-check("âncora padrão é o canto (área, não bolinha)",
-  geo.style.transform === undefined || geo.style.transform === "translate(0, 0)");
+check("âncora padrão é o CENTRO, e escrita (senão o CSS do HA é que manda)",
+  geo.style.transform === "translate(-50%, -50%)", geo.style.transform);
+const canto = make({ entity: "sensor.temp_cozinha", anchor: "top-left" });
+check("top-left encosta o canto de cima na coordenada — de verdade",
+  canto.style.transform === "translate(0%, 0%)", canto.style.transform);
 const cen = make({ entity: "sensor.temp_cozinha", anchor: "center", rotate: 90 });
 check("âncora central e rotação compõem o transform",
   cen.style.transform === "translate(-50%, -50%) rotate(90deg)", cen.style.transform);
+const cantoR = make({ entity: "sensor.temp_cozinha", anchor: "bottom-right", rotate: -90 });
+check("as 9 âncoras existem (bottom-right desloca 100 %)",
+  cantoR.style.transform === "translate(-100%, -100%) rotate(-90deg)", cantoR.style.transform);
+check("sinônimo escrito à mão não quebra a tela (top-center → top)",
+  make({ entity: "sensor.temp_cozinha", anchor: "TOP-CENTER" }).style.transform
+    === "translate(-50%, 0%)");
+check("âncora inventada cai no padrão do HA em vez de sumir com a área",
+  make({ entity: "sensor.temp_cozinha", anchor: "nordeste" }).style.transform
+    === "translate(-50%, -50%)");
 
 console.log("desempenho (o motivo de a planta não travar):");
 const perf = make({ entity: "sensor.temp_cozinha", preset: "temperature" });
@@ -248,13 +260,16 @@ check("editor monta o ha-form",
   ed.children.length === 1 && ed.children[0].tagName === "HA-FORM");
 check("editor mostra os padrões em vigor",
   ed._form.data.preset === "auto" && ed._form.data.mode === "step"
-  && ed._form.data.anchor === "top-left");
+  && ed._form.data.anchor === "center");
 check("editor rotula em pt-BR",
   ed._form.computeLabel({ name: "preset" }) === "Escala");
 const schema = JSON.stringify(ed._form.schema);
 check("editor cobre entidade, escala, geometria, presença, custom e ações",
-  ["entity", "preset", "width", "height", "occupancy_entities", "stops", "tap_action"]
+  ["entity", "preset", "width", "height", "anchor", "occupancy_entities", "stops", "tap_action"]
     .every((k) => schema.includes(`"${k}"`)));
+check("as 9 âncoras estão no seletor",
+  ["top-left", "top", "top-right", "left", "center", "right",
+    "bottom-left", "bottom", "bottom-right"].every((k) => schema.includes(`"${k}"`)));
 check("as 13 escalas estão no seletor",
   ["temperature", "humidity", "co2", "tvoc", "hcho", "pm25", "lux", "battery",
     "presence", "binary", "custom", "none", "auto"].every((k) => schema.includes(`"${k}"`)));

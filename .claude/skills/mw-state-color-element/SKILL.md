@@ -37,7 +37,7 @@ página em `IA/knowledge/` **antes** de virar preset.
 ```bash
 node --check dist/mw-state-color-element.js
 IA/tools/check-embeds.sh                 # 3 blocos: identity, climate, air
-node tools/probe.js                      # 58 verificações
+node tools/probe.js                      # 68 verificações
 # no destino, depois do deploy por SSH (runbook deploy-card-hacs-ssh.md):
 curl -s http://192.168.1.71:8123/hacsfiles/mw-ha-state-color-element/mw-state-color-element.js | grep -c "<marcador novo>"
 # e a prova de que a tela pinta, com os estados reais:
@@ -48,6 +48,7 @@ python3 ha-dashboards/scripts/qualidade_ar/conferir_qar3.py
 
 | Sintoma | Causa | Correção |
 |---|---|---|
+| Área meia largura à esquerda / meia altura acima do YAML | o `.element` do `hui-picture-elements-card` aplica `transform: translate(-50%, -50%)` em TODO elemento; quem não escreve `transform` herda o centro | `anchor` (9 pontos, padrão `center`) e o transform **sempre** escrito — v0.2.0. Opção declarada que não escreve CSS não existe na tela |
 | Área toda cinza | entidade `unavailable`, ou `preset` que não bate com a grandeza | `conferir_qar3.py` diz qual; `color_unavailable` é preto 30 % de propósito |
 | Número sai cortado | texto girado 90° numa caixa mais larga que alta | a planta é **retrato** (799×1451): 1 % de largura ≠ 1 % de altura. Girar só quando `altura% > largura% × 0,55 × 1,2` |
 | Faixa mais escura onde dois retângulos se encostam | mesma entidade repetida em retângulos que se sobrepõem — o alfa soma | uma área, uma leitura: unir os retângulos (`uniao()` do gerador) |

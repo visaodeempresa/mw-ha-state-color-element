@@ -149,10 +149,40 @@ Mais exemplos em [`examples/`](examples/).
 | chave | padrão | o que faz |
 |---|---|---|
 | `left` `top` `width` `height` | — | em `%` da imagem; vencem o `style:` do YAML |
-| `anchor` | `top-left` | `center` para posicionar pelo meio |
+| `anchor` | `center` | **a que ponto da área** `left`/`top` se referem — 9 valores (abaixo) |
 | `rotate` | — | gira a área inteira |
 | `radius` | — | canto arredondado (`6px`, `50%`…) |
 | `z_index` | — | quem fica por cima de quem |
+
+#### `anchor` — onde a coordenada pega a área
+
+O `picture-elements` do Home Assistant aplica `transform: translate(-50%, -50%)`
+em **todo** elemento (é o `.element` do CSS do card). Ou seja: na convenção
+nativa do HA, `left`/`top` são o **centro** do objeto, não o canto. Quem não
+escreve `transform` herda isso sem perceber.
+
+Até a v0.1.0 o padrão declarado aqui era `top-left`, mas ele não escrevia
+`transform` nenhum — o CSS do card vencia e a área saía **centrada** na
+coordenada, meia largura à esquerda e meia altura acima do que o YAML dizia.
+Da v0.2.0 em diante o `transform` é sempre escrito: o padrão passa a ser
+`center` (nada muda no que já estava no ar, e é a mesma convenção do HA) e
+`top-left` finalmente faz o que promete.
+
+| valor | `left`/`top` marcam |
+|---|---|
+| `center` (padrão) | o centro da área — igual ao HA |
+| `top-left` | o canto superior esquerdo |
+| `top` · `bottom` | o meio de cima · o meio de baixo |
+| `left` · `right` | o meio da esquerda · o meio da direita |
+| `top-right` · `bottom-left` · `bottom-right` | os outros três cantos |
+
+Convertendo à mão de uma convenção para a outra:
+
+```
+# retângulo desenhado pelo canto, escrito na convenção do centro
+left_centro = left_canto + largura / 2
+top_centro  = top_canto  + altura  / 2
+```
 
 ### Pintura
 | chave | padrão | o que faz |

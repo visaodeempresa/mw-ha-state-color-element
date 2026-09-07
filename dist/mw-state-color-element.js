@@ -19,6 +19,10 @@
  * mudanças de estado por minuto, isso é a diferença entre tela viva e tela
  * travada.
  *
+ * Geometria: `left`/`top` marcam o CENTRO da área (`anchor: center`), que é a
+ * convenção do próprio picture-elements do HA. `anchor` aceita os 9 pontos —
+ * `top-left` para quem prefere a coordenada no canto de cima.
+ *
  * JS puro, arquivo único, sem build.
  * Repo: https://github.com/visaodeempresa/mw-ha-state-color-element
  * Releases automáticas: merge na main → bump semântico → tag → HACS.
@@ -26,7 +30,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.0";
+  const VERSION = "0.2.0";
 
   /* ------------------------------------------ identidade no editor */
   // >>> mw-element-identity v1 — fonte canônica: /Volumes/SSD-T1-01/CLAUDE-SSD/IA/lib/mw-element-identity/mw-element-identity.js
@@ -454,6 +458,46 @@
     empty: "rgba(0, 0, 0, 0.20)",
   };
 
+  /* ------------------------------------------------------------- âncora */
+  // A que ponto da área o `left`/`top` se refere. Isto NÃO é enfeite: o
+  // picture-elements do HA aplica `transform: translate(-50%, -50%)` em TODO
+  // filho de `#root` (`.element` no CSS do hui-picture-elements-card), ou
+  // seja, a convenção nativa do HA é o CENTRO. Quem não escreve `transform`
+  // herda o centro sem saber — foi o que acontecia aqui até a v0.1.0, em que
+  // `anchor: top-left` era o padrão declarado e não valia nada.
+  //
+  // Agora o transform é SEMPRE escrito, e por isso o padrão passa a ser
+  // `center`: mantém a tela idêntica ao que já estava no ar e igual à do
+  // resto do HA. Quem quer que `left`/`top` sejam o canto de cima escolhe
+  // `top-left` — e agora funciona.
+  //
+  //   canto  →  center        (o que o HA faz por padrão)
+  //   top-left = left + 0     · top + 0
+  //   center   = left − L/2   · top − A/2   ⟹ para converter um retângulo
+  //   desenhado como canto para a convenção do centro, some metade:
+  //   left_centro = left_canto + L/2 · top_centro = top_canto + A/2
+  const ANCHOR_SHIFT = {
+    "top-left": [0, 0], top: [-50, 0], "top-right": [-100, 0],
+    left: [0, -50], center: [-50, -50], right: [-100, -50],
+    "bottom-left": [0, -100], bottom: [-50, -100], "bottom-right": [-100, -100],
+  };
+  // sinônimos que a mão escreve sem pensar
+  const ANCHOR_ALIAS = {
+    "top-center": "top", "center-top": "top", "middle-top": "top",
+    "center-left": "left", "middle-left": "left", "left-center": "left",
+    "center-right": "right", "middle-right": "right", "right-center": "right",
+    "bottom-center": "bottom", "center-bottom": "bottom", "middle-bottom": "bottom",
+    "center-center": "center", middle: "center", "": "center",
+    "left-top": "top-left", "top left": "top-left",
+    "right-top": "top-right", "left-bottom": "bottom-left",
+    "right-bottom": "bottom-right",
+  };
+  const anchorShift = (a) => {
+    const k = String(a === null || a === undefined ? "" : a).trim().toLowerCase();
+    const norm = ANCHOR_SHIFT[k] ? k : (ANCHOR_ALIAS[k] || "center");
+    return ANCHOR_SHIFT[norm] || ANCHOR_SHIFT.center;
+  };
+
   const DEFAULTS = {
     // --- leitura ---
     entity: "",
@@ -466,7 +510,9 @@
 
     // --- geometria (o que estiver aqui vence o `style:` do YAML) ---
     left: "", top: "", width: "", height: "",
-    anchor: "top-left",         // top-left | center
+    anchor: "center",           // a que ponto da área `left`/`top` se referem:
+                                // top-left | top | top-right | left | center |
+                                // right | bottom-left | bottom | bottom-right
     rotate: null,               // gira a área inteira
     radius: "",                 // ex.: "6px" — canto arredondado da área
     z_index: null,
@@ -713,10 +759,12 @@
       set("height", c.height);
       set("z-index", c.z_index);
       const hasR = c.rotate !== null && c.rotate !== "";
-      const base = c.anchor === "center" ? "translate(-50%, -50%)" : "translate(0, 0)";
-      if (hasR || c.anchor === "center") {
-        set("transform", `${base}${hasR ? ` rotate(${c.rotate}deg)` : ""}`);
-      }
+      // SEMPRE escrever o transform: sem ele quem manda é o `.element` do
+      // hui-picture-elements-card, que centraliza tudo — e aí a âncora
+      // escolhida no editor não sairia do papel.
+      const [tx, ty] = anchorShift(c.anchor);
+      set("transform",
+        `translate(${tx}%, ${ty}%)${hasR ? ` rotate(${c.rotate}deg)` : ""}`);
     }
 
     _build() {
@@ -947,7 +995,8 @@
     entity: "Entidade", attribute: "Atributo (opcional)",
     preset: "Escala", name: "Nome (tooltip)", title: MW_TITLE_LABEL,
     left: "Esquerda", top: "Topo", width: "Largura", height: "Altura",
-    anchor: "Âncora", rotate: "Girar a área", radius: "Canto arredondado",
+    anchor: "Âncora (a que ponto Esquerda/Topo se referem)",
+    rotate: "Girar a área", radius: "Canto arredondado",
     alpha: "Opacidade da cor", mode: "Transição de cor",
     border: "Borda (px)", border_color: "Cor da borda",
     fade: "Esfriamento (s)", z_index: "Camada (z-index)",
@@ -1002,6 +1051,19 @@
         { name: "width", selector: { text: {} } },
         { name: "height", selector: { text: {} } },
       ],
+    },
+    {
+      name: "anchor", selector: sel([
+        { value: "center", label: "Centro — como o Home Assistant (padrão)" },
+        { value: "top-left", label: "Canto superior esquerdo" },
+        { value: "top", label: "Meio de cima" },
+        { value: "top-right", label: "Canto superior direito" },
+        { value: "left", label: "Meio da esquerda" },
+        { value: "right", label: "Meio da direita" },
+        { value: "bottom-left", label: "Canto inferior esquerdo" },
+        { value: "bottom", label: "Meio de baixo" },
+        { value: "bottom-right", label: "Canto inferior direito" },
+      ]),
     },
     {
       type: "grid", name: "", schema: [
@@ -1068,12 +1130,6 @@
             { name: "fade", selector: { number: { min: 0, max: 5, step: 0.1, mode: "box" } } },
             { name: "rotate", selector: { number: { min: -180, max: 180, step: 1, mode: "box" } } },
             { name: "z_index", selector: { number: { min: -5, max: 20, step: 1, mode: "box" } } },
-            {
-              name: "anchor", selector: sel([
-                { value: "top-left", label: "Canto superior esquerdo (padrão)" },
-                { value: "center", label: "Centro" },
-              ]),
-            },
             { name: "text_color", selector: { text: {} } },
             { name: "font_weight", selector: { text: {} } },
             { name: "text_shadow", selector: { boolean: {} } },
