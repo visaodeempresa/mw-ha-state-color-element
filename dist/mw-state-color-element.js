@@ -19,6 +19,10 @@
  * mudanças de estado por minuto, isso é a diferença entre tela viva e tela
  * travada.
  *
+ * Geometria: `left`/`top` marcam o CENTRO da área (`anchor: center`), que é a
+ * convenção do próprio picture-elements do HA. `anchor` aceita os 9 pontos —
+ * `top-left` para quem prefere a coordenada no canto de cima.
+ *
  * JS puro, arquivo único, sem build.
  * Repo: https://github.com/visaodeempresa/mw-ha-state-color-element
  * Releases automáticas: merge na main → bump semântico → tag → HACS.
@@ -26,7 +30,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.1.0";
+  const VERSION = "0.2.0";
 
   /* ------------------------------------------ identidade no editor */
   // >>> mw-element-identity v1 — fonte canônica: /Volumes/SSD-T1-01/CLAUDE-SSD/IA/lib/mw-element-identity/mw-element-identity.js
@@ -316,18 +320,115 @@
     motion: "presence", occupancy: "presence", presence: "presence",
   };
 
-  // Escala de iluminância — grandeza sem regra global (a 40 é só °C e %RH).
-  // Faixas: escuro / penumbra / luz de tarefa fraca / ambiente / claro /
-  // muito claro / sol. Documentada em IA/knowledge/escala-de-iluminancia.md.
-  const LUX_STOPS = [0.9, 5, 20, 80, 250, 800];
-  const LUX_RGB = [
-    "10, 14, 30", "40, 48, 90", "70, 90, 150", "120, 160, 210",
-    "190, 215, 235", "245, 235, 170", "255, 214, 90",
+  // >>> mw-level-scale v1 — fonte canônica: /Volumes/SSD-T1-01/CLAUDE-SSD/IA/lib/mw-level-scale/mw-level-scale.js
+  // Escalas de nível: iluminância (lx) e bateria (%).
+  // Doc: IA/knowledge/escala-de-iluminancia.md.
+  const MW_LEVEL_ALPHA = 0.5;
+
+  // --- ILUMINÂNCIA -------------------------------------------------------
+  // Limites SUPERIORES inclusivos, do mais escuro para o mais claro. Os
+  // degraus crescem em razão ~3-4x porque a percepção de luz é logarítmica:
+  // a diferença entre 0 e 20 lx muda a vida do morador, a diferença entre
+  // 800 e 1200 lx não muda nada. Os números saíram do que os sensores da
+  // casa realmente reportam (medição de 2026-09-02: 0, 4, 6, 8, 10, 20, 31,
+  // 35 lx; remedição de 2026-09-06 com 15 sensores: p50 = 10, p90 = 96,
+  // max = 180) — a vida útil da escala está toda abaixo de 200 lx, e uma
+  // escala linear até 1000 pintaria a casa inteira da mesma cor.
+  // A cor é azul-noite -> âmbar de sol, e NÃO é a rampa de temperatura de
+  // propósito: quem olha a planta térmica e a planta de luz lado a lado não
+  // pode confundir as duas.
+  const MW_LUX_STOPS = [0.9, 5, 20, 80, 250, 800];
+  const MW_LUX_RGB = [
+    "10, 14, 30",     // escuro — noite, olho adaptado
+    "40, 48, 90",     // penumbra — dá para andar
+    "70, 90, 150",    // luz fraca — TV, abajur
+    "120, 160, 210",  // luz de ambiente
+    "190, 215, 235",  // claro — leitura confortável
+    "245, 235, 170",  // muito claro — luz de tarefa
+    "255, 214, 90",   // sol entrando
   ];
 
-  // Bateria: a mesma leitura de sempre — vermelho embaixo, verde em cima.
-  const BAT_STOPS = [10, 20, 40, 60];
-  const BAT_RGB = ["219, 68, 55", "255, 140, 0", "255, 166, 0", "154, 205, 50", "67, 160, 71"];
+  // --- BATERIA -----------------------------------------------------------
+  // Limites SUPERIORES inclusivos, em %. Ruim -> bom, vermelho -> verde.
+  // `canonica`: a régua documentada na página de iluminância, usada pelo
+  // mw-ha-state-color-element. Quatro degraus.
+  const MW_BAT_CANON_STOPS = [10, 20, 40, 60];
+  const MW_BAT_CANON_RGB = [
+    "219, 68, 55",   // <=10 % — troque hoje
+    "255, 140, 0",   // <=20 % — troque esta semana
+    "255, 166, 0",   // <=40 % — de olho
+    "154, 205, 50",  // <=60 % — tranquilo
+    "67, 160, 71",   // acima — cheia
+  ];
+  // `fina`: a régua do mw-ha-rainbow-card. Cinco degraus — separa "quase
+  // morta" (<=5 %) de "morrendo" (<=20 %) e ainda enxerga o topo da carga
+  // (<=80 %), que num arco-íris de 8 dispositivos lado a lado é o que deixa
+  // ver qual pilha vai cair primeiro.
+  const MW_BAT_FINA_STOPS = [5, 20, 40, 60, 80];
+  const MW_BAT_FINA_RGB = [
+    "139, 0, 0",     // <=5 %  — quase morta
+    "229, 57, 53",   // <=20 % — morrendo
+    "255, 152, 0",   // <=40 % — de olho
+    "253, 216, 53",  // <=60 % — ainda dá
+    "156, 204, 101", // <=80 % — tranquilo
+    "67, 160, 71",   // acima  — cheia
+  ];
+
+  const MW_LEVEL_ALIAS = {
+    lux: "lux", lx: "lux", illuminance: "lux", iluminancia: "lux", luz: "lux",
+    battery: "battery", bateria: "battery", bat: "battery",
+    battery_fina: "battery_fina", bateria_fina: "battery_fina", fina: "battery_fina",
+    battery_canonica: "battery", bateria_canonica: "battery", canonica: "battery",
+  };
+
+  const mwLevelRgba = (triplet, alpha) =>
+    `rgba(${triplet}, ${alpha === undefined || alpha === null ? MW_LEVEL_ALPHA : alpha})`;
+
+  const MW_LEVEL_TABLES = {
+    lux: { stops: MW_LUX_STOPS, rgb: MW_LUX_RGB, clamp: null, unit: "lx", decimals: 0 },
+    battery: { stops: MW_BAT_CANON_STOPS, rgb: MW_BAT_CANON_RGB, clamp: [0, 100], unit: "%", decimals: 0 },
+    battery_fina: { stops: MW_BAT_FINA_STOPS, rgb: MW_BAT_FINA_RGB, clamp: [0, 100], unit: "%", decimals: 0 },
+  };
+
+  const mwLevelKind = (kind) => {
+    const k = String(kind || "").toLowerCase().trim();
+    return MW_LEVEL_ALIAS[k] || (MW_LEVEL_TABLES[k] ? k : null);
+  };
+
+  // Devolve {stops, colors, clamp} — a mesma forma que mwClimateScale, para
+  // que o consumidor tenha um caminho de pintura só. Limite SUPERIOR
+  // inclusivo: a cor é a da primeira faixa cujo limite não foi ultrapassado.
+  const mwLevelScale = (kind, alpha) => {
+    const k = mwLevelKind(kind);
+    if (!k) return null;
+    const t = MW_LEVEL_TABLES[k];
+    return {
+      stops: t.stops.slice(),
+      colors: t.rgb.map((c) => mwLevelRgba(c, alpha)),
+      clamp: t.clamp ? t.clamp.slice() : null,
+    };
+  };
+
+  // Vazio/nulo NÃO é zero. Number("") e Number(null) devolvem 0, e um sensor
+  // sem leitura acabaria pintado como 0 lx (o degrau mais escuro) ou 0 % de
+  // pilha (o mais vermelho) em vez de cair na cor de "sem leitura" do
+  // consumidor. A guarda mora aqui para nenhum consumidor ter de lembrar.
+  const mwLevelNum = (value) => {
+    if (value === null || value === undefined || value === "") return null;
+    const v = Number(value);
+    return Number.isFinite(v) ? v : null;
+  };
+
+  const mwLevelColor = (kind, value, alpha) => {
+    const s = mwLevelScale(kind, alpha);
+    if (!s) return null;
+    let v = mwLevelNum(value);
+    if (v === null) return null;
+    if (s.clamp) v = Math.min(Math.max(v, s.clamp[0]), s.clamp[1]);
+    const i = s.stops.findIndex((stop) => v <= stop);
+    return s.colors[i === -1 ? s.stops.length : i];
+  };
+  // <<< mw-level-scale v1
 
   const rgbaOf = (triplet, alpha) => `rgba(${triplet}, ${alpha})`;
 
@@ -357,6 +458,46 @@
     empty: "rgba(0, 0, 0, 0.20)",
   };
 
+  /* ------------------------------------------------------------- âncora */
+  // A que ponto da área o `left`/`top` se refere. Isto NÃO é enfeite: o
+  // picture-elements do HA aplica `transform: translate(-50%, -50%)` em TODO
+  // filho de `#root` (`.element` no CSS do hui-picture-elements-card), ou
+  // seja, a convenção nativa do HA é o CENTRO. Quem não escreve `transform`
+  // herda o centro sem saber — foi o que acontecia aqui até a v0.1.0, em que
+  // `anchor: top-left` era o padrão declarado e não valia nada.
+  //
+  // Agora o transform é SEMPRE escrito, e por isso o padrão passa a ser
+  // `center`: mantém a tela idêntica ao que já estava no ar e igual à do
+  // resto do HA. Quem quer que `left`/`top` sejam o canto de cima escolhe
+  // `top-left` — e agora funciona.
+  //
+  //   canto  →  center        (o que o HA faz por padrão)
+  //   top-left = left + 0     · top + 0
+  //   center   = left − L/2   · top − A/2   ⟹ para converter um retângulo
+  //   desenhado como canto para a convenção do centro, some metade:
+  //   left_centro = left_canto + L/2 · top_centro = top_canto + A/2
+  const ANCHOR_SHIFT = {
+    "top-left": [0, 0], top: [-50, 0], "top-right": [-100, 0],
+    left: [0, -50], center: [-50, -50], right: [-100, -50],
+    "bottom-left": [0, -100], bottom: [-50, -100], "bottom-right": [-100, -100],
+  };
+  // sinônimos que a mão escreve sem pensar
+  const ANCHOR_ALIAS = {
+    "top-center": "top", "center-top": "top", "middle-top": "top",
+    "center-left": "left", "middle-left": "left", "left-center": "left",
+    "center-right": "right", "middle-right": "right", "right-center": "right",
+    "bottom-center": "bottom", "center-bottom": "bottom", "middle-bottom": "bottom",
+    "center-center": "center", middle: "center", "": "center",
+    "left-top": "top-left", "top left": "top-left",
+    "right-top": "top-right", "left-bottom": "bottom-left",
+    "right-bottom": "bottom-right",
+  };
+  const anchorShift = (a) => {
+    const k = String(a === null || a === undefined ? "" : a).trim().toLowerCase();
+    const norm = ANCHOR_SHIFT[k] ? k : (ANCHOR_ALIAS[k] || "center");
+    return ANCHOR_SHIFT[norm] || ANCHOR_SHIFT.center;
+  };
+
   const DEFAULTS = {
     // --- leitura ---
     entity: "",
@@ -369,7 +510,9 @@
 
     // --- geometria (o que estiver aqui vence o `style:` do YAML) ---
     left: "", top: "", width: "", height: "",
-    anchor: "top-left",         // top-left | center
+    anchor: "center",           // a que ponto da área `left`/`top` se referem:
+                                // top-left | top | top-right | left | center |
+                                // right | bottom-left | bottom | bottom-right
     rotate: null,               // gira a área inteira
     radius: "",                 // ex.: "6px" — canto arredondado da área
     z_index: null,
@@ -616,10 +759,12 @@
       set("height", c.height);
       set("z-index", c.z_index);
       const hasR = c.rotate !== null && c.rotate !== "";
-      const base = c.anchor === "center" ? "translate(-50%, -50%)" : "translate(0, 0)";
-      if (hasR || c.anchor === "center") {
-        set("transform", `${base}${hasR ? ` rotate(${c.rotate}deg)` : ""}`);
-      }
+      // SEMPRE escrever o transform: sem ele quem manda é o `.element` do
+      // hui-picture-elements-card, que centraliza tudo — e aí a âncora
+      // escolhida no editor não sairia do papel.
+      const [tx, ty] = anchorShift(c.anchor);
+      set("transform",
+        `translate(${tx}%, ${ty}%)${hasR ? ` rotate(${c.rotate}deg)` : ""}`);
     }
 
     _build() {
@@ -731,8 +876,8 @@
         }
         return mwAirColor(k, raw, alpha);
       }
-      if (kind === "table:lux") return tableColor(tableFrom(LUX_RGB, LUX_STOPS, alpha), raw, c.mode);
-      if (kind === "table:bat") return tableColor(tableFrom(BAT_RGB, BAT_STOPS, alpha), raw, c.mode);
+      if (kind === "table:lux") return tableColor(tableFrom(MW_LUX_RGB, MW_LUX_STOPS, alpha), raw, c.mode);
+      if (kind === "table:bat") return tableColor(tableFrom(MW_BAT_CANON_RGB, MW_BAT_CANON_STOPS, alpha), raw, c.mode);
       if (kind === "custom") {
         return tableColor({
           stops: Array.isArray(c.stops) ? c.stops.map(Number) : [],
@@ -850,7 +995,8 @@
     entity: "Entidade", attribute: "Atributo (opcional)",
     preset: "Escala", name: "Nome (tooltip)", title: MW_TITLE_LABEL,
     left: "Esquerda", top: "Topo", width: "Largura", height: "Altura",
-    anchor: "Âncora", rotate: "Girar a área", radius: "Canto arredondado",
+    anchor: "Âncora (a que ponto Esquerda/Topo se referem)",
+    rotate: "Girar a área", radius: "Canto arredondado",
     alpha: "Opacidade da cor", mode: "Transição de cor",
     border: "Borda (px)", border_color: "Cor da borda",
     fade: "Esfriamento (s)", z_index: "Camada (z-index)",
@@ -905,6 +1051,19 @@
         { name: "width", selector: { text: {} } },
         { name: "height", selector: { text: {} } },
       ],
+    },
+    {
+      name: "anchor", selector: sel([
+        { value: "center", label: "Centro — como o Home Assistant (padrão)" },
+        { value: "top-left", label: "Canto superior esquerdo" },
+        { value: "top", label: "Meio de cima" },
+        { value: "top-right", label: "Canto superior direito" },
+        { value: "left", label: "Meio da esquerda" },
+        { value: "right", label: "Meio da direita" },
+        { value: "bottom-left", label: "Canto inferior esquerdo" },
+        { value: "bottom", label: "Meio de baixo" },
+        { value: "bottom-right", label: "Canto inferior direito" },
+      ]),
     },
     {
       type: "grid", name: "", schema: [
@@ -971,12 +1130,6 @@
             { name: "fade", selector: { number: { min: 0, max: 5, step: 0.1, mode: "box" } } },
             { name: "rotate", selector: { number: { min: -180, max: 180, step: 1, mode: "box" } } },
             { name: "z_index", selector: { number: { min: -5, max: 20, step: 1, mode: "box" } } },
-            {
-              name: "anchor", selector: sel([
-                { value: "top-left", label: "Canto superior esquerdo (padrão)" },
-                { value: "center", label: "Centro" },
-              ]),
-            },
             { name: "text_color", selector: { text: {} } },
             { name: "font_weight", selector: { text: {} } },
             { name: "text_shadow", selector: { boolean: {} } },
