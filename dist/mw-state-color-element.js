@@ -30,7 +30,7 @@
 (() => {
   "use strict";
 
-  const VERSION = "0.2.0";
+  const VERSION = "0.3.0";
 
   /* ------------------------------------------ identidade no editor */
   // >>> mw-element-identity v1 — fonte canônica: /Volumes/SSD-T1-01/CLAUDE-SSD/IA/lib/mw-element-identity/mw-element-identity.js
@@ -516,6 +516,8 @@
     rotate: null,               // gira a área inteira
     radius: "",                 // ex.: "6px" — canto arredondado da área
     z_index: null,
+    opacity: null,              // 0..1 — transparência do elemento inteiro
+                                // (área + texto + borda); null = opaco
 
     // --- pintura ---
     alpha: null,                // null = alfa do preset
@@ -758,6 +760,7 @@
       set("width", c.width);
       set("height", c.height);
       set("z-index", c.z_index);
+      set("opacity", c.opacity);
       const hasR = c.rotate !== null && c.rotate !== "";
       // SEMPRE escrever o transform: sem ele quem manda é o `.element` do
       // hui-picture-elements-card, que centraliza tudo — e aí a âncora
@@ -997,7 +1000,7 @@
     left: "Esquerda", top: "Topo", width: "Largura", height: "Altura",
     anchor: "Âncora (a que ponto Esquerda/Topo se referem)",
     rotate: "Girar a área", radius: "Canto arredondado",
-    alpha: "Opacidade da cor", mode: "Transição de cor",
+    alpha: "Opacidade da cor", opacity: "Transparência do elemento", mode: "Transição de cor",
     border: "Borda (px)", border_color: "Cor da borda",
     fade: "Esfriamento (s)", z_index: "Camada (z-index)",
     show_value: "Mostrar o valor", decimals: "Casas decimais",
@@ -1068,6 +1071,7 @@
     {
       type: "grid", name: "", schema: [
         { name: "alpha", selector: { number: { min: 0, max: 1, step: 0.05, mode: "box" } } },
+        { name: "opacity", selector: { number: { min: 0, max: 1, step: 0.05, mode: "box" } } },
         {
           name: "mode", selector: sel([
             { value: "step", label: "Degraus (padrão)" },

@@ -188,6 +188,7 @@ top_centro  = top_canto  + altura  / 2
 | chave | padrão | o que faz |
 |---|---|---|
 | `alpha` | do preset | opacidade da cor (a planta está por baixo) |
+| `opacity` | — | transparência do elemento inteiro: área, borda e texto (0 = invisível, 1 = opaco) |
 | `mode` | `step` | `gradient` interpola entre as cores da tabela |
 | `border` / `border_color` | `0` | borda; sem cor, usa a própria cor mais firme |
 | `fade` | `0.6` | segundos de transição quando a cor muda |
